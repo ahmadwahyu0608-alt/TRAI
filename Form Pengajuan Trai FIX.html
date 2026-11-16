@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Form Pengajuan Trai</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--text:#1d2330;--muted:#6b7385;--line:#dfe3ea;--accent:#1f5eff;--accent-t:#fff;--danger:#d93a3a;color-scheme:light;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151b;--card:#1b2029;--text:#e8ebf2;--muted:#98a1b3;--line:#2c3340;--accent:#5b8cff;--accent-t:#0b1020;--danger:#ff6b6b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12151b;--card:#1b2029;--text:#e8ebf2;--muted:#98a1b3;--line:#2c3340;--accent:#5b8cff;--accent-t:#0b1020;--danger:#ff6b6b;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.4}
+.wrap{max-width:1000px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:1.4rem;margin:0 0 4px}
+.sub{color:var(--muted);font-size:.9rem;margin:0 0 18px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px 16px;border-radius:10px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-t);border-color:var(--accent);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.no{font-weight:700;background:var(--accent);color:var(--accent-t);border-radius:8px;padding:2px 10px;font-size:.9rem}
+.del{border:none;background:none;color:var(--danger);padding:4px 8px;font-size:.85rem}
+.pics{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px 0}
+.pic{position:relative;height:130px;background:var(--bg);border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;color:var(--muted);font-size:.85rem}
+.pic img{max-width:100%;max-height:100%;object-fit:contain}
+.pic .x{position:absolute;top:4px;right:4px;width:24px;height:24px;padding:0;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;font-size:14px;line-height:1}
+.fields{padding:12px;display:grid;gap:10px}
+label{font-size:.78rem;color:var(--muted);display:block;margin-bottom:3px}
+input[type=text]{width:100%;font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+input[type=text]:focus{outline:2px solid var(--accent);border-color:transparent}
+.empty{text-align:center;color:var(--muted);padding:50px 10px;border:2px dashed var(--line);border-radius:14px}
+.note{color:var(--danger);font-size:.85rem;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Form Pengajuan Trai</h1>
+  <p class="sub">Tiap nomor pengajuan berisi 2 foto, Nopol, Driver, dan Qty. Nomor urut mengikuti urutan input. Semua data bisa diedit.</p>
+  <div class="bar">
+    <button class="primary" id="addBtn">+ Tambah Pengajuan</button>
+    <button id="pdfBtn">Export PDF</button>
+    <button id="clearBtn">Hapus Semua</button>
+  </div>
+  <input type="file" id="file" accept="image/*" hidden>
+  <div id="list"></div>
+  <div class="note" id="note" hidden></div>
+</div>
+<script>
+var items=[],target=null;
+var $=function(s){return document.querySelector(s)};
+try{items=JSON.parse(localStorage.getItem('trai-items')||'[]')}catch(e){items=[]}
+items.forEach(function(it){
+  if(!it.photos){it.photos=it.src?[{src:it.src,w:it.w,h:it.h}]:[]}
+  if(it.qty===undefined)it.qty='';
+});
+function save(){
+  try{localStorage.setItem('trai-items',JSON.stringify(items));$('#note').hidden=true}
+  catch(e){$('#note').hidden=false;$('#note').textContent='Penyimpanan browser penuh. Data tetap tampil selama halaman terbuka, segera export PDF.'}
+}
+function compress(file){
+  return new Promise(function(res,rej){
+    var r=new FileReader();
+    r.onerror=rej;
+    r.onload=function(){
+      var img=new Image();
+      img.onerror=rej;
+      img.onload=function(){
+        var m=900,s=Math.min(1,m/Math.max(img.width,img.height));
+        var w=Math.round(img.width*s),h=Math.round(img.height*s);
+        var c=document.createElement('canvas');c.width=w;c.height=h;
+        var x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(img,0,0,w,h);
+        res({src:c.toDataURL('image/jpeg',0.72),w:w,h:h});
+      };
+      img.src=r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function slot(it,k){
+  var p=it.photos[k];
+  if(p)return '<div class="pic" data-slot="'+it.id+'" data-k="'+k+'"><img src="'+p.src+'" alt="Foto '+(k+1)+'"><button class="x" data-rm="'+it.id+'" data-k="'+k+'">×</button></div>';
+  return '<div class="pic" data-slot="'+it.id+'" data-k="'+k+'">+ Foto '+(k+1)+'</div>';
+}
+function field(it,f,label,ph){
+  return '<div><label>'+label+'</label><input type="text" data-f="'+f+'" data-id="'+it.id+'" value="'+esc(it[f])+'" placeholder="'+ph+'"'+(f==='qty'?' inputmode="numeric"':'')+'></div>';
+}
+function render(){
+  var el=$('#list');
+  if(!items.length){el.innerHTML='<div class="empty">Belum ada data. Klik “Tambah Pengajuan” untuk mulai.</div>';return}
+  el.innerHTML='<div class="grid">'+items.map(function(it,i){
+    return '<div class="card"><div class="head"><span class="no">No. '+(i+1)+'</span><button class="del" data-del="'+it.id+'">Hapus</button></div>'+
+    '<div class="pics">'+slot(it,0)+slot(it,1)+'</div>'+
+    '<div class="fields">'+field(it,'nopol','Nopol','Contoh: H 1234 AB')+field(it,'driver','Driver','Nama driver')+field(it,'qty','Qty Pengajuan Trai','Jumlah')+'</div></div>';
+  }).join('')+'</div>';
+}
+$('#addBtn').onclick=function(){
+  items.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,6),photos:[],nopol:'',driver:'',qty:''});
+  save();render();
+  window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+};
+$('#file').onchange=async function(e){
+  var f=e.target.files[0];
+  if(f&&target){
+    try{
+      var c=await compress(f);
+      var it=items.find(function(x){return x.id===target.id});
+      if(it){it.photos[target.k]=c}
+    }catch(err){}
+  }
+  e.target.value='';target=null;save();render();
+};
+$('#list').addEventListener('click',function(e){
+  var d=e.target.closest('[data-del]');
+  if(d){items=items.filter(function(x){return x.id!==d.dataset.del});save();render();return}
+  var rm=e.target.closest('[data-rm]');
+  if(rm){
+    var it=items.find(function(x){return x.id===rm.dataset.rm});
+    if(it){var arr=[it.photos[0],it.photos[1]];arr[+rm.dataset.k]=null;it.photos=arr.filter(Boolean);save();render()}
+    return;
+  }
+  var s=e.target.closest('[data-slot]');
+  if(s){
+    var item=items.find(function(x){return x.id===s.dataset.slot});
+    var k=+s.dataset.k;
+    if(item&&k>item.photos.length)k=item.photos.length;
+    target={id:s.dataset.slot,k:k};$('#file').click();
+  }
+});
+$('#list').addEventListener('input',function(e){
+  var t=e.target;
+  if(t.dataset&&t.dataset.f){var it=items.find(function(x){return x.id===t.dataset.id});if(it){it[t.dataset.f]=t.value;save()}}
+});
+$('#clearBtn').onclick=function(){
+  if(items.length&&confirm('Hapus semua data?')){items=[];save();render()}
+};
+$('#pdfBtn').onclick=function(){
+  if(!items.length){alert('Belum ada data untuk di-export.');return}
+  var J=window.jspdf&&window.jspdf.jsPDF;
+  if(!J){alert('Library PDF gagal dimuat. Periksa koneksi internet.');return}
+  var doc=new J({orientation:'portrait',unit:'mm',format:'a4'});
+  var PW=210,PH=297,M=10,gap=4,cols=3,perPage=12,cw=(PW-2*M-gap*(cols-1))/cols,ch=62;
+  doc.setFont('helvetica','bold');doc.setFontSize(15);
+  doc.text('FORM PENGAJUAN TRAI',105,13,{align:'center'});
+  doc.setFont('helvetica','normal');doc.setFontSize(8.5);
+  doc.text('Tanggal: '+new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'}),105,18.5,{align:'center'});
+  items.forEach(function(it,i){
+    var k=i%perPage;
+    if(i>0&&k===0)doc.addPage();
+    var top=(i<perPage)?24:12;
+    var x=M+(k%cols)*(cw+gap),y=top+Math.floor(k/cols)*(ch+4);
+    doc.setDrawColor(190);doc.rect(x,y,cw,ch);
+    doc.setFont('helvetica','bold');doc.setFontSize(9);
+    doc.text('No. '+(i+1),x+2.5,y+4.8);
+    var bw=(cw-5-2.5)/2,bh=34;
+    for(var p=0;p<2;p++){
+      var ph=it.photos[p],bx=x+2.5+p*(bw+2.5),by=y+7;
+      doc.setDrawColor(215);doc.rect(bx,by,bw,bh);
+      if(ph){
+        var s=Math.min(bw/ph.w,bh/ph.h),w=ph.w*s,h=ph.h*s;
+        try{doc.addImage(ph.src,'JPEG',bx+(bw-w)/2,by+(bh-h)/2,w,h)}catch(e){}
+      }
+    }
+    doc.setFont('helvetica','normal');doc.setFontSize(8);
+    doc.text('Nopol  : '+(it.nopol||'-'),x+2.5,y+46.5,{maxWidth:cw-5});
+    doc.text('Driver : '+(it.driver||'-'),x+2.5,y+51,{maxWidth:cw-5});
+    doc.text('Qty      : '+(it.qty||'-'),x+2.5,y+56,{maxWidth:cw-5});
+  });
+  var total=0,sy=0;
+  function sumHead(first){
+    if(first){doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(0);doc.text('RANGKUMAN PENGAJUAN TRAI',105,16,{align:'center'});sy=24}else{sy=14}
+    doc.setFillColor(235);doc.rect(M,sy,PW-2*M,7,'F');doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(0);
+    doc.text('No',M+2,sy+4.8);doc.text('Nopol',M+16,sy+4.8);doc.text('Driver',M+62,sy+4.8);doc.text('Qty',PW-M-2,sy+4.8,{align:'right'});sy+=7;
+  }
+  doc.addPage();sumHead(true);
+  items.forEach(function(it,i){
+    if(sy>PH-30){doc.addPage();sumHead(false)}
+    var q=parseFloat(String(it.qty).replace(',','.'));if(!isNaN(q))total+=q;
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(0);
+    doc.text(String(i+1),M+2,sy+4.8);
+    doc.text(it.nopol||'-',M+16,sy+4.8,{maxWidth:44});
+    doc.text(it.driver||'-',M+62,sy+4.8,{maxWidth:90});
+    doc.text(it.qty!==''&&it.qty!=null?String(it.qty):'-',PW-M-2,sy+4.8,{align:'right'});
+    doc.setDrawColor(210);doc.line(M,sy+7,PW-M,sy+7);sy+=7;
+  });
+  doc.setFillColor(235);doc.rect(M,sy+2,PW-2*M,8,'F');
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(0);
+  doc.text('SUB TOTAL QTY PENGAJUAN',M+2,sy+7.5);
+  doc.text(String(Math.round(total*100)/100),PW-M-2,sy+7.5,{align:'right'});
+  var n=doc.getNumberOfPages();
+  for(var q=1;q<=n;q++){doc.setPage(q);doc.setFontSize(7.5);doc.setTextColor(120);doc.text('Halaman '+q+' / '+n,105,291,{align:'center'})}
+  doc.save('form-pengajuan-trai.pdf');
+};
+render();
+</script>
+</body>
+</html>
